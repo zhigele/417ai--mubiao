@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YOLOv8 目标检测</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .drag-over { border-color:#3b82f6!important; background-color:#eff6ff!important; }
+        .loading-spinner { border:3px solid #f3f3f3; border-top:3px solid #3b82f6; border-radius:50%; width:36px; height:36px; animation:spin 1s linear infinite; }
+        @keyframes spin { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
+        @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+        .fade-in { animation:fadeIn 0.3s ease-out; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- 导航栏 -->
+    <nav class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+                <span class="text-xl">🎯</span>
+                <span class="font-bold text-gray-800 text-lg">YOLOv8 目标检测</span>
+            </div>
+            <div class="flex items-center space-x-3">
+                <span id="usernameDisplay" class="text-sm text-gray-400">加载中...</span>
+                <button onclick="doLogout()" class="text-sm px-3 py-1.5 text-gray-500 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">退出登录</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <!-- 服务状态 -->
+        <div id="serverStatus" class="mb-6 p-3 rounded-lg text-center bg-gray-100 fade-in">
+            <div class="flex items-center justify-center space-x-2">
+                <div class="loading-spinner" style="width:18px;height:18px;border-width:2px"></div>
+                <span class="text-gray-500 text-sm">正在连接服务器...</span>
+            </div>
+        </div>
+
+        <!-- 步骤1：上传模型 -->
+        <div id="modelSection" class="bg-white rounded-xl shadow p-6 mb-6 fade-in">
+            <h2 class="text-lg font-semibold text-gray-700 mb-4">📦 步骤 1：上传模型文件</h2>
+            <div id="modelDropZone" class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center transition-all cursor-pointer hover:border-blue-400" onclick="document.getElementById('modelInput').click()">
+                <input type="file" id="modelInput" accept=".pt,.pth" class="hidden">
+                <div id="modelUploadContent">
+                    <svg class="w-14 h-14 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                    <p class="text-gray-500">点击或拖拽 <span class="text-blue-500 font-medium">.pt / .pth</span> 模型文件到此处</p>
+                    <p class="text-gray-400 text-xs mt-2">支持 YOLOv8 训练生成的 best.pt / last.pt</p>
+                </div>
+                <div id="modelInfo" class="hidden">
+                    <svg class="w-10 h-10 mx-auto text-green-500 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                    <p class="text-green-600 font-medium" id="modelFileName"></p>
+                    <p class="text-gray-400 text-sm mt-1" id="modelClasses"></p>
+                    <button onclick="clearModel(event)" class="mt-2 text-xs text-red-400 hover:text-red-600">移除</button>
+                </div>
+            </div>
+            <div id="modelLoading" class="hidden mt-4 flex items-center justify-center space-x-2">
+                <div class="loading-spinner"></div><span class="text-gray-500">正在加载模型...</span>
+            </div>
+        </div>
+
+        <!-- 步骤2：上传图片 -->
+        <div id="imageSection" class="bg-white rounded-xl shadow p-6 mb-6 fade-in hidden">
+            <h2 class="text-lg font-semibold text-gray-700 mb-4">🖼️ 步骤 2：上传待检测图片</h2>
+            <div id="imageDropZone" class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center transition-all cursor-pointer hover:border-green-400" onclick="document.getElementById('imageInput').click()">
+                <input type="file" id="imageInput" accept="image/*" class="hidden">
+                <div id="imageUploadContent">
+                    <svg class="w-14 h-14 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                    <p class="text-gray-500">点击或拖拽图片到此处（JPG / PNG / WebP）</p>
+                </div>
+                <div id="imagePreviewContainer" class="hidden">
+                    <img id="imagePreview" class="max-h-56 mx-auto rounded-lg shadow mb-2">
+                    <button onclick="clearImage(event)" class="text-xs text-red-400 hover:text-red-600">移除</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 步骤3：开始检测 -->
+        <div id="controlSection" class="bg-white rounded-xl shadow p-6 mb-6 fade-in hidden">
+            <h2 class="text-lg font-semibold text-gray-700 mb-4">⚙️ 步骤 3：开始检测</h2>
+            <div class="flex flex-wrap gap-6 items-end">
+                <div class="flex-1 min-w-[160px]">
+                    <label class="block text-sm font-medium text-gray-600 mb-1">置信度阈值</label>
+                    <input type="range" id="confThreshold" min="0.05" max="0.95" step="0.05" value="0.25" class="w-full" oninput="document.getElementById('confValue').textContent=this.value">
+                    <p class="text-center text-sm text-blue-500 mt-1 font-medium"><span id="confValue">0.25</span></p>
+                </div>
+                <div class="flex-1 min-w-[160px]">
+                    <label class="block text-sm font-medium text-gray-600 mb-1">IoU 阈值</label>
+                    <input type="range" id="iouThreshold" min="0.05" max="0.95" step="0.05" value="0.45" class="w-full" oninput="document.getElementById('iouValue').textContent=this.value">
+                    <p class="text-center text-sm text-blue-500 mt-1 font-medium"><span id="iouValue">0.45</span></p>
+                </div>
+                <button id="detectBtn" onclick="startDetection()" class="px-10 py-2.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold rounded-lg shadow hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 transition-all">🚀 开始检测</button>
+            </div>
+        </div>
+
+        <!-- 检测结果 -->
+        <div id="resultSection" class="hidden bg-white rounded-xl shadow p-6 fade-in">
+            <h2 class="text-lg font-semibold text-gray-700 mb-4">📊 检测结果</h2>
+            <div id="detectionLoading" class="hidden text-center py-16">
+                <div class="loading-spinner mx-auto mb-3"></div>
+                <span class="text-gray-400">正在检测，请稍候...</span>
+            </div>
+            <div id="detectionResult" class="hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-500 mb-2">检测可视化</h3>
+                        <img id="resultImage" class="w-full rounded-lg shadow">
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-500 mb-2">检测统计</h3>
+                        <div class="grid grid-cols-2 gap-3 mb-3">
+                            <div class="bg-blue-50 rounded-lg p-3 text-center"><div class="text-xs text-blue-400">检测目标数</div><div id="totalDetections" class="text-3xl font-bold text-blue-600">0</div></div>
+                            <div class="bg-green-50 rounded-lg p-3 text-center"><div class="text-xs text-green-400">处理时间</div><div id="processingTime" class="text-3xl font-bold text-green-600">0ms</div></div>
+                        </div>
+                        <div id="detectionList" class="space-y-1.5 max-h-56 overflow-y-auto"></div>
+                        <button onclick="downloadResult()" class="mt-4 w-full py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium transition-colors">⬇️ 下载结果图片</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let modelId = null, currentImage = null, resultImageData = null;
+
+        async function doLogout() {
+            await fetch('/api/logout', {method:'POST'});
+            window.location.href = '/login';
+        }
+
+        async function checkServer() {
+            try {
+                const res = await fetch('/api/health');
+                if (!res.ok) throw new Error('not ok');
+                const d = await res.json();
+                if (d.status === 'running') {
+                    document.getElementById('serverStatus').className = 'mb-6 p-3 rounded-lg text-center bg-green-50 border border-green-200 fade-in';
+                    document.getElementById('serverStatus').innerHTML = '<p class="text-green-700 text-sm font-medium">✅ 服务就绪 &nbsp;|&nbsp; PyTorch ' + d.torch_version + ' &nbsp;|&nbsp; CUDA: ' + (d.cuda_available ? '<span class="text-green-600">可用</span>' : '不可用') + '</p>';
+                }
+            } catch(e) {
+                document.getElementById('serverStatus').className = 'mb-6 p-3 rounded-lg text-center bg-yellow-50 border border-yellow-200 fade-in';
+                document.getElementById('serverStatus').innerHTML = '<p class="text-yellow-700 text-sm">⚠️ 服务状态未知，可正常使用</p>';
+            }
+            document.getElementById('usernameDisplay').textContent = '👤';
+        }
+
+        // 立即显示模型区域，不等待服务器
+        document.getElementById('modelSection').classList.remove('hidden');
+        document.getElementById('usernameDisplay').textContent = '👤 已登录';
+        // 后台检查服务器
+        checkServer();
+
+        // 模型拖拽
+        const modelDZ = document.getElementById('modelDropZone');
+        modelDZ.addEventListener('dragover', e => { e.preventDefault(); modelDZ.classList.add('drag-over'); });
+        modelDZ.addEventListener('dragleave', () => modelDZ.classList.remove('drag-over'));
+        modelDZ.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); modelDZ.classList.remove('drag-over'); if(e.dataTransfer.files.length) handleModelFile(e.dataTransfer.files[0]); });
+        document.getElementById('modelInput').addEventListener('change', e => { if(e.target.files.length) handleModelFile(e.target.files[0]); });
+
+        async function handleModelFile(file) {
+            if(!file) return;
+            document.getElementById('modelLoading').classList.remove('hidden');
+            document.getElementById('modelUploadContent').classList.add('hidden');
+            const fd = new FormData(); fd.append('model', file);
+            try {
+                const res = await fetch('/api/load_model', {method:'POST', body:fd});
+                const d = await res.json();
+                if(d.success){
+                    modelId = d.model_id;
+                    document.getElementById('modelFileName').textContent = '✅ ' + d.model_name;
+                    const cls = Object.values(d.classes).join('、');
+                    document.getElementById('modelClasses').textContent = '类别: ' + (cls || '未知');
+                    document.getElementById('modelInfo').classList.remove('hidden');
+                    document.getElementById('imageSection').classList.remove('hidden');
+                    document.getElementById('controlSection').classList.remove('hidden');
+                } else { alert('模型加载失败：' + d.error); document.getElementById('modelUploadContent').classList.remove('hidden'); }
+            } catch(e){ alert('上传失败：' + e.message); document.getElementById('modelUploadContent').classList.remove('hidden'); }
+            document.getElementById('modelLoading').classList.add('hidden');
+        }
+
+        function clearModel(e){
+            e&&e.stopPropagation();
+            if(modelId) fetch('/api/unload_model',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model_id:modelId})});
+            modelId=null;
+            document.getElementById('modelUploadContent').classList.remove('hidden');
+            document.getElementById('modelInfo').classList.add('hidden');
+            ['imageSection','controlSection','resultSection'].forEach(id=>document.getElementById(id).classList.add('hidden'));
+            document.getElementById('modelInput').value='';
+        }
+
+        // 图片拖拽
+        const imageDZ = document.getElementById('imageDropZone');
+        imageDZ.addEventListener('dragover', e => { e.preventDefault(); imageDZ.classList.add('drag-over'); });
+        imageDZ.addEventListener('dragleave', () => imageDZ.classList.remove('drag-over'));
+        imageDZ.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); imageDZ.classList.remove('drag-over'); if(e.dataTransfer.files.length) handleImageFile(e.dataTransfer.files[0]); });
+        document.getElementById('imageInput').addEventListener('change', e => { if(e.target.files.length) handleImageFile(e.target.files[0]); });
+
+        function handleImageFile(file) {
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = ev => {
+                currentImage = ev.target.result;
+                document.getElementById('imageUploadContent').classList.add('hidden');
+                document.getElementById('imagePreviewContainer').classList.remove('hidden');
+                document.getElementById('imagePreview').src = currentImage;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function clearImage(e){ e&&e.stopPropagation(); currentImage=null; document.getElementById('imageUploadContent').classList.remove('hidden'); document.getElementById('imagePreviewContainer').classList.add('hidden'); document.getElementById('imageInput').value=''; }
+
+        async function startDetection() {
+            if(!modelId || !currentImage) { alert('请先上传模型和图片'); return; }
+            document.getElementById('resultSection').classList.remove('hidden');
+            document.getElementById('detectionLoading').classList.remove('hidden');
+            document.getElementById('detectionResult').classList.add('hidden');
+            const btn = document.getElementById('detectBtn'); btn.disabled = true; btn.textContent = '⏳ 检测中...';
+            const fd = new FormData();
+            fd.append('model_id', modelId);
+            const imgFile = await fetch(currentImage).then(r => r.blob());
+            fd.append('image', imgFile, 'image.jpg');
+            fd.append('conf', document.getElementById('confThreshold').value);
+            fd.append('iou', document.getElementById('iouThreshold').value);
+            try {
+                const res = await fetch('/api/detect', {method:'POST', body:fd});
+                const d = await res.json();
+                if(d.success){
+                    document.getElementById('detectionLoading').classList.add('hidden');
+                    document.getElementById('detectionResult').classList.remove('hidden');
+                    document.getElementById('resultImage').src = 'data:image/jpeg;base64,' + d.result_image;
+                    document.getElementById('totalDetections').textContent = d.detection_count;
+                    document.getElementById('processingTime').textContent = Math.round(d.processing_time) + 'ms';
+                    resultImageData = d.result_image;
+                    const list = document.getElementById('detectionList');
+                    const byClass = {};
+                    d.detections.forEach(det => { byClass[det.class] = (byClass[det.class]||0)+1; });
+                    list.innerHTML = Object.entries(byClass).map(([cls,count]) => `<div class="flex justify-between px-3 py-1.5 bg-gray-50 rounded text-sm"><span class="text-gray-600">${cls}</span><span class="font-semibold text-blue-500">${count} 个</span></div>`).join('');
+                    if(!d.detections.length) list.innerHTML = '<div class="text-center text-gray-400 py-4">未检测到任何目标</div>';
+                } else { alert('检测失败：' + d.error); document.getElementById('detectionLoading').classList.add('hidden'); }
+            } catch(e){ alert('检测出错：' + e.message); document.getElementById('detectionLoading').classList.add('hidden'); }
+            btn.disabled = false; btn.textContent = '🚀 开始检测';
+        }
+
+        function downloadResult() {
+            if(!resultImageData) return;
+            const a = document.createElement('a');
+            a.href = 'data:image/jpeg;base64,' + resultImageData;
+            a.download = 'detection_result.jpg';
+            a.click();
+        }
+    </script>
+
+    <!-- AI 助手 -->
+    <button id="chatToggleBtn" onclick="toggleChat()" class="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all text-2xl z-50 flex items-center justify-center">💬</button>
+    <div id="chatPanel" class="hidden fixed bottom-24 right-6 w-[380px] h-[520px] bg-white rounded-2xl shadow-2xl flex flex-col z-50 border border-gray-200 overflow-hidden">
+        <div class="bg-gradient-to-r from-blue-500 to-purple-600 px-4 py-3 flex items-center justify-between flex-shrink-0">
+            <div class="flex items-center space-x-2">
+                <span class="text-xl">🤖</span>
+                <div><div class="text-white font-semibold text-sm">AI 助手</div><div class="text-blue-100 text-xs">YOLOv8 & 目标检测专家</div></div>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button onclick="clearChat()" class="text-blue-200 hover:text-white text-xs" title="清空记录">🗑️</button>
+                <button onclick="toggleChat()" class="text-white hover:text-gray-200 text-lg leading-none">✕</button>
+            </div>
+        </div>
+        <div id="chatBody" class="flex-1 overflow-y-auto p-4 space-y-1"></div>
+        <div class="px-3 pb-2 flex gap-1.5 flex-wrap flex-shrink-0">
+            <button onclick="document.getElementById('chatInput').value='怎么上传模型？';sendMsg();" class="text-xs px-2.5 py-1 bg-gray-100 hover:bg-blue-50 text-gray-600 hover:text-blue-600 rounded-full transition-colors">📦 上传模型</button>
+            <button onclick="document.getElementById('chatInput').value='怎么添加管理员？';sendMsg();" class="text-xs px-2.5 py-1 bg-gray-100 hover:bg-blue-50 text-gray-600 hover:text-blue-600 rounded-full transition-colors">👤 添加管理员</button>
+            <button onclick="document.getElementById('chatInput').value='检测记录在哪看？';sendMsg();" class="text-xs px-2.5 py-1 bg-gray-100 hover:bg-blue-50 text-gray-600 hover:text-blue-600 rounded-full transition-colors">📋 检测记录</button>
+            <button onclick="document.getElementById('chatInput').value='怎么导出模型？';sendMsg();" class="text-xs px-2.5 py-1 bg-gray-100 hover:bg-blue-50 text-gray-600 hover:text-blue-600 rounded-full transition-colors">📤 导出模型</button>
+        </div>
+        <div class="border-t border-gray-100 p-3 flex-shrink-0">
+            <div class="flex items-center space-x-2">
+                <input type="text" id="chatInput" class="flex-1 px-3 py-2 border border-gray-200 rounded-full text-sm focus:outline-none focus:border-blue-400" placeholder="输入问题，按 Enter 发送..." onkeydown="if(event.key==='Enter')sendMsg()">
+                <button onclick="sendMsg()" class="w-9 h-9 bg-blue-500 hover:bg-blue-600 text-white rounded-full flex items-center justify-center transition-colors flex-shrink-0">➤</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const CHAT_KEY = 'yolo_chat_history';
+        let chatOpen = false;
+        function getHistory(){ try{ return JSON.parse(localStorage.getItem(CHAT_KEY)||'[]'); } catch{ return []; } }
+        function saveHistory(h){ localStorage.setItem(CHAT_KEY, JSON.stringify(h)); }
+        function renderChat(){
+            const h = getHistory();
+            const body = document.getElementById('chatBody');
+            if(!body) return;
+            body.innerHTML = h.map(m => `<div class="flex ${m.role==='user'?'justify-end':'justify-start'} mb-3">${m.role!=='user'?'<div class="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold mr-2 flex-shrink-0">AI</div>':''}<div class="max-w-[75%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${m.role==='user'?'bg-blue-500 text-white rounded-tr-sm':'bg-gray-100 text-gray-700 rounded-tl-sm'}">${m.content.replace(/\n/g,'<br>')}</div>${m.role==='user'?'<div class="w-7 h-7 rounded-full bg-gray-300 flex items-center justify-center text-gray-600 text-xs font-bold ml-2 flex-shrink-0">U</div>':''}</div>`).join('');
+            setTimeout(()=>{ const el=document.getElementById('chatBody'); if(el) el.scrollTop=el.scrollHeight; }, 50);
+        }
+        function toggleChat(){
+            chatOpen = !chatOpen;
+            document.getElementById('chatPanel').classList.toggle('hidden', !chatOpen);
+            document.getElementById('chatToggleBtn').innerHTML = chatOpen ? '✕' : '💬';
+            if(chatOpen) renderChat();
+        }
+        async function sendMsg(){
+            const text = document.getElementById('chatInput').value.trim();
+            if(!text) return;
+            const h = getHistory(); h.push({role:'user', content:text}); saveHistory(h); renderChat();
+            document.getElementById('chatInput').value = '';
+            document.getElementById('chatBody').innerHTML += '<div id="typingIndicator" class="flex justify-start mb-3"><div class="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold mr-2">AI</div><div class="max-w-[75%] px-4 py-2.5 rounded-2xl rounded-tl-sm bg-gray-100 text-gray-400 text-sm">思考中...</div></div>';
+            setTimeout(()=>{ const el=document.getElementById('chatBody'); if(el) el.scrollTop=el.scrollHeight; }, 50);
+            try {
+                const res = await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text})});
+                const d = await res.json();
+                document.getElementById('typingIndicator')?.remove();
+                const h2 = getHistory(); h2.push({role:'assistant', content:d.reply}); saveHistory(h2); renderChat();
+            } catch(e){
+                document.getElementById('typingIndicator')?.remove();
+                const h2 = getHistory(); h2.push({role:'assistant', content:'抱歉，网络出现问题，请稍后重试。'}); saveHistory(h2); renderChat();
+            }
+        }
+        function clearChat(){ localStorage.removeItem(CHAT_KEY); renderChat(); }
+    </script>
+</body>
+</html>
